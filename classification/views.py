@@ -1,14 +1,16 @@
 from django.shortcuts import redirect
+from django.core.files.storage import FileSystemStorage
 import cv2
 import onnxruntime as ort
 import numpy as np
 import os
 from .body_analysis.ultraface.dependencies.box_utils import predict
 
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 # Face detection using UltraFace-640 onnx model
-face_detector_onnx = "classification/body_analysis/ultraface/models/version-RFB-640.onnx"
+face_detector_onnx = dir_path + "/body_analysis/ultraface/models/version-RFB-640.onnx"
 
 # Start from ORT 1.10, ORT requires explicitly setting the providers parameter if you want to use execution providers
 # other than the default CPU provider (as opposed to the previous behavior of providers getting set/registered by default
@@ -53,7 +55,7 @@ def faceDetector(orig_image, threshold = 0.7):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 # Face gender classification using GoogleNet onnx model
-gender_classifier_onnx = "classification/body_analysis/age_gender/models/gender_googlenet.onnx"
+gender_classifier_onnx = dir_path + "/body_analysis/age_gender/models/gender_googlenet.onnx"
 
 # Start from ORT 1.10, ORT requires explicitly setting the providers parameter if you want to use execution providers
 # other than the default CPU provider (as opposed to the previous behavior of providers getting set/registered by default
@@ -80,7 +82,7 @@ def genderClassifier(orig_image):
 
 # ------------------------------------------------------------------------------------------------------------------------------------------------
 # Face age classification using GoogleNet onnx model
-age_classifier_onnx = "classification/body_analysis/age_gender/models/age_googlenet.onnx"
+age_classifier_onnx = dir_path + "/body_analysis/age_gender/models/age_googlenet.onnx"
 
 # Start from ORT 1.10, ORT requires explicitly setting the providers parameter if you want to use execution providers
 # other than the default CPU provider (as opposed to the previous behavior of providers getting set/registered by default
@@ -109,22 +111,29 @@ def ageClassifier(orig_image):
 
 # Create your views here.
 def classify(request):
-    img_path = "classification/body_analysis/age_gender/dependencies/bella.jpg"
-    color = (255, 128, 0)
+    if request.method == 'POST':
+        image = request.FILES['image']
+        fs = FileSystemStorage()
+        filename = fs.save(os.path.join(dir_path + '/static', 'input.jpg'), image)
+        img_path = fs.path(filename)
+        color = (255, 128, 0)
 
-    orig_image = cv2.imread(img_path)
-    boxes, labels, probs = faceDetector(orig_image)
+        orig_image = cv2.imread(img_path)
+        boxes, labels, probs = faceDetector(orig_image)
 
-    for i in range(boxes.shape[0]):
-        box = scale(boxes[i, :])
-        cropped = cropImage(orig_image, box)
-        gender = genderClassifier(cropped)
-        age = ageClassifier(cropped)
-        print(f'Box {i} --> {gender}, {age}')
+        for i in range(boxes.shape[0]):
+            box = scale(boxes[i, :])
+            cropped = cropImage(orig_image, box)
+            gender = genderClassifier(cropped)
+            age = ageClassifier(cropped)
+            print(f'Box {i} --> {gender}, {age}')
 
-        cv2.rectangle(orig_image, (box[0], box[1]), (box[2], box[3]), color, 4)
-        cv2.putText(orig_image, f'{gender}, {age}', (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.25, color, 2,
-                    cv2.LINE_AA)
-        cv2.imwrite(os.path.join('classification/static', 'classified.jpg'), orig_image)
+            cv2.rectangle(orig_image, (box[0], box[1]), (box[2], box[3]), color, 4)
+            cv2.putText(orig_image, f'{gender}, {age}', (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 1.25, color, 2,
+                        cv2.LINE_AA)
+            cv2.imwrite(os.path.join(dir_path + '/static', 'classified.jpg'), orig_image)
 
-    return redirect('/static/classified.jpg')
+        fs.delete(img_path)
+        return redirect('/static/classified.jpg')
+    else:
+        return redirect('/')
