@@ -16,9 +16,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 from first_app import views
+from classification import views as classification
 
 urlpatterns = [
     path('', views.index, name='index'),
     path('student/', views.get_student),
     path('admin/', admin.site.urls),
+    path('classify/', classification.classify),
 ]
